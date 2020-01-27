@@ -29,13 +29,12 @@ namespace DataOrTimer
             var waitTime = TimeSpan.FromSeconds(Math.Clamp(delayDelta.TotalSeconds, minDelay.TotalSeconds, maxDelay.TotalSeconds));
             var wakeupTime = context.CurrentUtcDateTime + waitTime;
 
-            logger.LogInformation($">>>>>>      Starting orchestration with expiration at { expiration }, waitTime { waitTime }, next wakeup at { wakeupTime }");
+            logger.LogInformation($">>>>>>      [ORC] Orchestration begins with expiration at { expiration }, waitTime { waitTime }, next wakeup at { wakeupTime }");
 
             using (var cts = new CancellationTokenSource())
             {
                 var timerTask = context.CreateTimer(wakeupTime, cts.Token);
                 var dataTask = context.WaitForExternalEvent<string>(DataEventName);
-
 
                 var winner = await Task.WhenAny(dataTask, timerTask);
                 if (winner == dataTask)
@@ -44,24 +43,24 @@ namespace DataOrTimer
 
                     var data = await dataTask;
 
-                    logger.LogInformation($">>>>>>      Data Event Triggered, data = { data }");
+                    logger.LogInformation($">>>>>>      [ORC] Data Event Triggered, data = { data }");
 
                     var result = await context.CallActivityAsync<string>(nameof(SayHello), data);
 
-                    logger.LogInformation($">>>>>>      Result { result }");
+                    logger.LogInformation($">>>>>>      [ORC] Activity result { result }");
                 }
                 else
                 {
-                    logger.LogInformation(">>>>>>      Timer Triggered");
+                    logger.LogInformation(">>>>>>      [ORC] Timer Triggered");
 
                     if (context.CurrentUtcDateTime >= expiration)
                     {
-                        logger.LogInformation(">>>>>>      Orchestration expired");
+                        logger.LogInformation(">>>>>>      [ORC] Orchestration expired");
                         return;
                     }
                 }
 
-                logger.LogInformation(">>>>>>      Restarting for another round");
+                logger.LogInformation(">>>>>>      [ORC] Restarting for another round");
                 context.ContinueAsNew(expiration, true);
             }
         }
@@ -69,11 +68,11 @@ namespace DataOrTimer
         [FunctionName(nameof(SayHello))]
         public static async Task<string> SayHello([ActivityTrigger] string name, ILogger log)
         {
-            log.LogInformation($">>>>>>      Saying hello to {name}, STARTED.");
+            log.LogInformation($">>>>>>      [ACT] Saying hello to {name}, STARTED.");
 
             await Task.Delay(TimeSpan.FromSeconds(10));
 
-            log.LogInformation($">>>>>>      Saying hello to {name}, DONE.");
+            log.LogInformation($">>>>>>      [ACT] Saying hello to {name}, DONE.");
 
             return $"Hello {name}!";
         }
@@ -90,16 +89,16 @@ namespace DataOrTimer
             var orchestration = await starter.GetStatusAsync(orchestrationId);
             if (orchestration == null)
             {
-                logger.LogInformation(">>>>>>      Starting new orchestration, expiring in 10 minutes");
+                logger.LogInformation(">>>>>>      [CLI] Starting new orchestration, expiring in 10 minutes");
                 await starter.StartNewAsync(nameof(RunOrchestrator), orchestrationId, DateTime.UtcNow.AddMinutes(10));
             }
             else
             {
-                logger.LogInformation(">>>>>>      Orchestration exists");
+                logger.LogInformation(">>>>>>      [CLI] Orchestration already exists");
             }
 
             var data = $"DATA:{Guid.NewGuid()}";
-            logger.LogInformation($">>>>>>      Sending data { data }");
+            logger.LogInformation($">>>>>>      [CLI] Sending data { data }");
             await starter.RaiseEventAsync(orchestrationId, DataEventName, data);
 
             return starter.CreateCheckStatusResponse(req, orchestrationId);
